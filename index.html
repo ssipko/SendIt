@@ -1,362 +1,814 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Ski Day Oracle</title>
+<meta name="description" content="Shake your phone to decide what to do next on the mountain!">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f0f4f8;
+    --card: #ffffff;
+    --primary: #1a73e8;
+    --primary-light: #e8f0fe;
+    --text: #1a2233;
+    --text-muted: #5f6b7a;
+    --border: #dfe3e8;
+    --shadow: 0 8px 32px rgba(26, 34, 51, 0.08);
+    --shadow-lg: 0 16px 48px rgba(26, 34, 51, 0.14);
+    --radius: 16px;
+    --green: #2e7d32;
+    --blue: #1565c0;
+    --black: #212121;
+    --orange: #e65100;
+    --amber: #f9a825;
+    --teal: #00897b;
+    --purple: #6a1b9a;
+    --red: #c62828;
+    --pink: #ad1457;
+  }
 
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100dvh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Snow Animation */
+  .snow-container {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 0; overflow: hidden;
+  }
+  .snowflake {
+    position: absolute; top: -10px; color: rgba(255,255,255,0.7);
+    animation: snowfall linear infinite;
+    font-size: 10px;
+    text-shadow: 0 0 4px rgba(200,220,240,0.5);
+  }
+  @keyframes snowfall {
+    0% { transform: translateY(-10px) rotate(0deg) translateX(0); opacity: 1; }
+    50% { transform: translateY(50vh) rotate(180deg) translateX(30px); }
+    100% { transform: translateY(105vh) rotate(360deg) translateX(-20px); opacity: 0.3; }
+  }
+
+  /* Mountain Background */
+  .mountain-bg {
+    position: fixed; bottom: 0; left: 0; right: 0; height: 40vh;
+    z-index: 0; pointer-events: none;
+  }
+  .mountain-bg svg { width: 100%; height: 100%; }
+
+  /* Layout */
+  .app-container {
+    position: relative; z-index: 1;
+    max-width: 480px; margin: 0 auto;
+    padding: 20px 16px 100px;
+    min-height: 100dvh;
+  }
+
+  /* Header */
+  .header {
+    text-align: center; padding: 24px 0 8px;
+  }
+  .header-icon { font-size: 36px; margin-bottom: 4px; }
+  .header h1 {
+    font-size: 28px; font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #1a73e8, #00897b);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header p {
+    font-size: 14px; color: var(--text-muted); margin-top: 4px; font-weight: 400;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex; gap: 4px; background: var(--card);
+    border-radius: 12px; padding: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    margin: 16px 0;
+  }
+  .tab {
+    flex: 1; padding: 10px 8px; text-align: center;
+    border-radius: 10px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+    border: none; background: transparent; color: var(--text-muted);
+  }
+  .tab.active { background: var(--primary); color: #fff; box-shadow: 0 2px 8px rgba(26,115,232,0.3); }
+  .tab:not(.active):hover { background: var(--primary-light); color: var(--primary); }
+
+  /* Panels */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Oracle Panel */
+  .oracle-area {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 20px 0;
+  }
+
+  .result-card {
+    width: 100%; background: var(--card);
+    border-radius: var(--radius); padding: 40px 24px;
+    box-shadow: var(--shadow); text-align: center;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    min-height: 200px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    position: relative; overflow: hidden;
+  }
+  .result-card.shaking {
+    animation: cardShake 0.5s ease-in-out;
+  }
+  @keyframes cardShake {
+    0%, 100% { transform: translateX(0) rotate(0); }
+    20% { transform: translateX(-8px) rotate(-1deg); }
+    40% { transform: translateX(8px) rotate(1deg); }
+    60% { transform: translateX(-5px) rotate(-0.5deg); }
+    80% { transform: translateX(5px) rotate(0.5deg); }
+  }
+
+  .result-emoji { font-size: 64px; margin-bottom: 12px; line-height: 1; }
+  .result-text {
+    font-size: 26px; font-weight: 800; letter-spacing: -0.3px;
+    margin-bottom: 6px;
+  }
+  .result-subtitle {
+    font-size: 14px; color: var(--text-muted); font-weight: 400;
+  }
+
+  .idle-prompt {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  .idle-prompt .shake-icon {
+    font-size: 48px; animation: gentleBounce 2s ease-in-out infinite;
+  }
+  @keyframes gentleBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+  .idle-prompt p { font-size: 16px; color: var(--text-muted); font-weight: 500; }
+  .idle-prompt .hint { font-size: 12px; color: var(--text-muted); opacity: 0.6; }
+
+  .oracle-btn {
+    margin-top: 24px; width: 100%; padding: 16px;
+    background: linear-gradient(135deg, #1a73e8, #1557b0);
+    color: #fff; border: none; border-radius: 12px;
+    font-size: 16px; font-weight: 700;
+    cursor: pointer; transition: all 0.2s;
+    box-shadow: 0 4px 16px rgba(26,115,232,0.3);
+    font-family: inherit;
+  }
+  .oracle-btn:active { transform: scale(0.97); }
+  .oracle-btn:hover { box-shadow: 0 6px 20px rgba(26,115,232,0.4); }
+
+  .share-btn {
+    margin-top: 12px; padding: 10px 20px;
+    background: transparent; border: 1.5px solid var(--border);
+    border-radius: 10px; font-size: 13px; font-weight: 600;
+    color: var(--text-muted); cursor: pointer;
+    font-family: inherit; transition: all 0.2s;
+  }
+  .share-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+  .sound-toggle {
+    position: absolute; top: 16px; right: 16px;
+    background: none; border: none; font-size: 20px;
+    cursor: pointer; opacity: 0.5; transition: opacity 0.2s;
+    z-index: 2;
+  }
+  .sound-toggle:hover { opacity: 1; }
+
+  /* History Panel */
+  .history-list { display: flex; flex-direction: column; gap: 8px; }
+  .history-item {
+    background: var(--card); border-radius: 12px;
+    padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .history-emoji { font-size: 28px; flex-shrink: 0; }
+  .history-info { flex: 1; }
+  .history-name { font-size: 15px; font-weight: 600; }
+  .history-time { font-size: 12px; color: var(--text-muted); }
+  .history-num {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--primary-light); color: var(--primary);
+    font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .history-empty {
+    text-align: center; padding: 48px 16px;
+    color: var(--text-muted); font-size: 14px;
+  }
+  .history-empty span { font-size: 40px; display: block; margin-bottom: 12px; }
+  .clear-history-btn {
+    margin-top: 16px; width: 100%; padding: 12px;
+    background: transparent; border: 1.5px solid var(--border);
+    border-radius: 10px; font-size: 13px; font-weight: 600;
+    color: var(--text-muted); cursor: pointer; font-family: inherit;
+  }
+
+  /* Settings Panel */
+  .settings-section {
+    background: var(--card); border-radius: var(--radius);
+    padding: 20px; box-shadow: var(--shadow); margin-bottom: 16px;
+  }
+  .settings-section h3 {
+    font-size: 14px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 16px;
+  }
+  .weight-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--bg);
+  }
+  .weight-item:last-child { border-bottom: none; }
+  .weight-emoji { font-size: 24px; flex-shrink: 0; width: 32px; text-align: center; }
+  .weight-info { flex: 1; min-width: 0; }
+  .weight-name { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .weight-slider-row { display: flex; align-items: center; gap: 8px; }
+  .weight-slider {
+    flex: 1; -webkit-appearance: none; appearance: none;
+    height: 6px; border-radius: 3px; background: var(--bg);
+    outline: none;
+  }
+  .weight-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--primary); cursor: pointer;
+    box-shadow: 0 2px 6px rgba(26,115,232,0.3);
+  }
+  .weight-slider::-moz-range-thumb {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--primary); cursor: pointer; border: none;
+  }
+  .weight-val {
+    font-size: 13px; font-weight: 700; color: var(--primary);
+    min-width: 32px; text-align: right;
+  }
+  .prob-bar {
+    height: 3px; border-radius: 2px; background: var(--primary);
+    margin-top: 4px; transition: width 0.3s;
+    opacity: 0.4;
+  }
+
+  .preset-btns {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;
+  }
+  .preset-btn {
+    padding: 8px 14px; border-radius: 8px;
+    border: 1.5px solid var(--border); background: var(--card);
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    font-family: inherit; color: var(--text); transition: all 0.2s;
+  }
+  .preset-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+  .share-config {
+    margin-top: 12px; width: 100%; padding: 12px;
+    background: var(--primary-light); border: none;
+    border-radius: 10px; font-size: 13px; font-weight: 600;
+    color: var(--primary); cursor: pointer; font-family: inherit;
+  }
+
+  /* Shake indicator */
+  .shake-active-indicator {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.7); color: #fff;
+    padding: 8px 16px; border-radius: 20px;
+    font-size: 12px; font-weight: 600;
+    opacity: 0; transition: opacity 0.3s;
+    z-index: 100; pointer-events: none;
+  }
+  .shake-active-indicator.show { opacity: 1; }
+
+  /* Result color themes */
+  .result-card[data-result="green"] { border-top: 4px solid var(--green); }
+  .result-card[data-result="blue"] { border-top: 4px solid var(--blue); }
+  .result-card[data-result="black"] { border-top: 4px solid var(--black); }
+  .result-card[data-result="break"] { border-top: 4px solid var(--amber); }
+  .result-card[data-result="done"] { border-top: 4px solid var(--red); }
+  .result-card[data-result="top"] { border-top: 4px solid var(--teal); }
+  .result-card[data-result="tbar"] { border-top: 4px solid var(--orange); }
+  .result-card[data-result="park"] { border-top: 4px solid var(--purple); }
+  .result-card[data-result="apres"] { border-top: 4px solid var(--pink); }
+
+  .share-canvas { display: none; }
+
+  @media (max-width: 380px) {
+    .result-text { font-size: 22px; }
+    .result-emoji { font-size: 52px; }
+    .tab { font-size: 12px; padding: 8px 4px; }
+  }
+
+  .fade-in { animation: fadeIn 0.4s ease-out; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .pop-in { animation: popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+  @keyframes popIn {
+    from { opacity: 0; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1); }
+  }
+</style>
+</head>
+<body>
+
+<div class="snow-container" id="snow"></div>
+
+<div class="mountain-bg">
+  <svg viewBox="0 0 1440 320" preserveAspectRatio="none">
+    <path fill="rgba(200,215,235,0.3)" d="M0,224L60,208C120,192,240,160,360,170.7C480,181,600,235,720,234.7C840,235,960,181,1080,165.3C1200,149,1320,171,1380,181.3L1440,192L1440,320L1380,320C1320,320,1200,320,1080,320C960,320,840,320,720,320C600,320,480,320,360,320C240,320,120,320,60,320L0,320Z"/>
+    <path fill="rgba(180,200,225,0.25)" d="M0,288L48,272C96,256,192,224,288,213.3C384,203,480,213,576,229.3C672,245,768,267,864,261.3C960,256,1056,224,1152,213.3C1248,203,1344,213,1392,218.7L1440,224L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"/>
+  </svg>
+</div>
+
+<div class="shake-active-indicator" id="shakeIndicator">📱 Shake active!</div>
+
+<div class="app-container">
+
+  <div class="header">
+    <div class="header-icon">⛷️</div>
+    <h1>Ski Day Oracle</h1>
+    <p>Shake or tap to decide your next move</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="oracle">🎿 Oracle</button>
+    <button class="tab" data-tab="history">📋 History</button>
+    <button class="tab" data-tab="settings">⚙️ Settings</button>
+  </div>
+
+  <div class="panel active" id="panel-oracle">
+    <div class="oracle-area">
+      <div class="result-card" id="resultCard">
+        <button class="sound-toggle" id="soundToggle" title="Toggle sound">🔊</button>
+        <div id="resultContent">
+          <div class="idle-prompt">
+            <div class="shake-icon">📱</div>
+            <p>Shake your phone or tap below</p>
+            <span class="hint">The mountain awaits your next move</span>
+          </div>
+        </div>
+      </div>
+      <button class="oracle-btn" id="oracleBtn">🎲 What Should I Do Next?</button>
+      <button class="share-btn" id="shareBtn" style="display:none;">📸 Share Result</button>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-history">
+    <div id="historyContent">
+      <div class="history-empty">
+        <span>⛷️</span>
+        No picks yet today!<br>Shake it up to get started.
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-settings">
+    <div class="settings-section">
+      <h3>Presets</h3>
+      <div class="preset-btns">
+        <button class="preset-btn" data-preset="balanced">⚖️ Balanced</button>
+        <button class="preset-btn" data-preset="sendit">🔥 Send It</button>
+        <button class="preset-btn" data-preset="chill">😎 Chill Day</button>
+        <button class="preset-btn" data-preset="beginner">🐣 Beginner</button>
+      </div>
+    </div>
+    <div class="settings-section">
+      <h3>Likelihood Weights</h3>
+      <p style="font-size:12px;color:var(--text-muted);margin:-8px 0 16px;">
+        Adjust relative weights — higher = more likely. The bar shows actual probability.
+      </p>
+      <div id="weightSliders"></div>
+    </div>
+    <div class="settings-section">
+      <h3>Share Settings</h3>
+      <p style="font-size:12px;color:var(--text-muted);margin:-8px 0 12px;">
+        Copy a link so your group uses the same weights.
+      </p>
+      <button class="share-config" id="shareConfig">📋 Copy Settings Link</button>
+    </div>
+  </div>
+
+</div>
+
+<canvas class="share-canvas" id="shareCanvas" width="600" height="400"></canvas>
+
+<script>
+// ═══════════════════════════════════════════
+// Data
+// ═══════════════════════════════════════════
 const OPTIONS = [
-  { id: "green", label: "Green Run", emoji: "🟢", color: "#22c55e", desc: "Easy cruiser" },
-  { id: "blue", label: "Blue Run", emoji: "🔵", color: "#3b82f6", desc: "Intermediate fun" },
-  { id: "black", label: "Black Run", emoji: "⬛", color: "#1e1e2e", desc: "Expert terrain" },
-  { id: "break", label: "Take a Break", emoji: "☕", color: "#a16207", desc: "Hot cocoa time" },
-  { id: "done", label: "Done for the Day", emoji: "🛑", color: "#dc2626", desc: "Call it quits" },
-  { id: "top", label: "Go to the Top", emoji: "⛰️", color: "#6366f1", desc: "Summit vibes" },
-  { id: "tbar", label: "Take the T-Bar", emoji: "🪝", color: "#0891b2", desc: "Old school lift" },
-  { id: "park", label: "Terrain Park", emoji: "🏂", color: "#f59e0b", desc: "Jumps & rails" },
-  { id: "apres", label: "Start Après Ski", emoji: "🍺", color: "#e11d48", desc: "Party time!" },
+  { id: 'green',  name: 'Green Run',        emoji: '🟢', subtitle: 'Easy cruiser — enjoy the view!',       color: '#2e7d32' },
+  { id: 'blue',   name: 'Blue Run',         emoji: '🔵', subtitle: 'Step it up a notch!',                  color: '#1565c0' },
+  { id: 'black',  name: 'Black Run',        emoji: '⚫', subtitle: 'Full send — steep & deep!',            color: '#212121' },
+  { id: 'break',  name: 'Take a Break',     emoji: '☕', subtitle: 'Hot cocoa time!',                      color: '#f9a825' },
+  { id: 'done',   name: 'Done for the Day', emoji: '🏠', subtitle: 'You crushed it. Rest up.',             color: '#c62828' },
+  { id: 'top',    name: 'Go to the Top',    emoji: '🏔️', subtitle: 'Summit vibes — top of the world!',    color: '#00897b' },
+  { id: 'tbar',   name: 'Take the T-Bar',   emoji: '🎿', subtitle: 'Old school lift — hold on tight!',    color: '#e65100' },
+  { id: 'park',   name: 'Terrain Park',     emoji: '🤸', subtitle: 'Hit some features!',                   color: '#6a1b9a' },
+  { id: 'apres',  name: 'Après Ski',        emoji: '🍻', subtitle: "Cheers! You've earned it.",            color: '#ad1457' },
 ];
 
-const PROFILES = {
-  balanced: { name: "Balanced", emoji: "⚖️", weights: { green: 5, blue: 5, black: 5, break: 5, done: 5, top: 5, tbar: 5, park: 5, apres: 5 } },
-  sendit: { name: "Send It", emoji: "🔥", weights: { green: 1, blue: 3, black: 10, break: 1, done: 1, top: 10, tbar: 5, park: 10, apres: 2 } },
-  chill: { name: "Chill Day", emoji: "😌", weights: { green: 8, blue: 7, black: 1, break: 9, done: 5, top: 2, tbar: 3, park: 1, apres: 8 } },
-  beginner: { name: "Beginner", emoji: "⛷️", weights: { green: 10, blue: 5, black: 1, break: 8, done: 4, top: 2, tbar: 2, park: 1, apres: 4 } },
-  party: { name: "Party Mode", emoji: "🎉", weights: { green: 2, blue: 3, black: 4, break: 3, done: 1, top: 3, tbar: 2, park: 8, apres: 10 } },
+const PRESETS = {
+  balanced: { green: 15, blue: 20, black: 15, break: 10, done: 5, top: 15, tbar: 5, park: 10, apres: 5 },
+  sendit:   { green: 3,  blue: 15, black: 35, break: 2,  done: 0, top: 20, tbar: 5, park: 15, apres: 5 },
+  chill:    { green: 25, blue: 15, black: 3,  break: 20, done: 5, top: 5,  tbar: 2, park: 5,  apres: 20 },
+  beginner: { green: 35, blue: 15, black: 0,  break: 15, done: 5, top: 5,  tbar: 0, park: 5,  apres: 20 },
 };
 
-const snowflakes = Array.from({ length: 40 }, (_, i) => ({
-  id: i,
-  left: Math.random() * 100,
-  delay: Math.random() * 8,
-  duration: 4 + Math.random() * 6,
-  size: 2 + Math.random() * 6,
-  opacity: 0.3 + Math.random() * 0.5,
-}));
+// ═══════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════
+let weights = { ...PRESETS.balanced };
+let history = [];
+let soundOn = true;
+let lastResult = null;
+let isAnimating = false;
 
-function weightedRandom(weights) {
-  const total = Object.values(weights).reduce((a, b) => a + b, 0);
-  let r = Math.random() * total;
-  for (const [key, weight] of Object.entries(weights)) {
-    r -= weight;
-    if (r <= 0) return key;
-  }
-  return Object.keys(weights)[0];
+// Load from URL hash
+function loadFromHash() {
+  try {
+    const hash = window.location.hash.slice(1);
+    if (!hash) return;
+    const params = new URLSearchParams(hash);
+    OPTIONS.forEach(opt => {
+      const v = params.get(opt.id);
+      if (v !== null) weights[opt.id] = Math.max(0, Math.min(100, parseInt(v) || 0));
+    });
+  } catch(e) {}
+}
+loadFromHash();
+
+// ═══════════════════════════════════════════
+// Audio (Web Audio API)
+// ═══════════════════════════════════════════
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
 }
 
-function playSound(type) {
+function playRevealSound() {
+  if (!soundOn) return;
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = getAudioCtx();
+    [0, 100, 200].forEach((delay, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = [523, 659, 784][i];
+      gain.gain.setValueAtTime(0.15, ctx.currentTime + delay / 1000);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay / 1000 + 0.3);
+      osc.start(ctx.currentTime + delay / 1000);
+      osc.stop(ctx.currentTime + delay / 1000 + 0.3);
+    });
+  } catch(e) {}
+}
+
+function playShakeSound() {
+  if (!soundOn) return;
+  try {
+    const ctx = getAudioCtx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
-    if (type === "shake") {
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(200, ctx.currentTime);
-      osc.frequency.linearRampToValueAtTime(600, ctx.currentTime + 0.15);
-      gain.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.15);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.15);
-    } else if (type === "reveal") {
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(400, ctx.currentTime);
-      osc.frequency.linearRampToValueAtTime(800, ctx.currentTime + 0.1);
-      osc.frequency.setValueAtTime(600, ctx.currentTime + 0.15);
-      osc.frequency.linearRampToValueAtTime(1200, ctx.currentTime + 0.3);
-      gain.gain.setValueAtTime(0.12, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.4);
-    }
-  } catch (e) {}
+    osc.type = 'triangle';
+    osc.frequency.value = 220;
+    osc.frequency.linearRampToValueAtTime(440, ctx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+    osc.start(); osc.stop(ctx.currentTime + 0.2);
+  } catch(e) {}
 }
 
-export default function MountainOracle() {
-  const [weights, setWeights] = useState({ ...PROFILES.balanced.weights });
-  const [activeProfile, setActiveProfile] = useState("balanced");
-  const [result, setResult] = useState(null);
-  const [shaking, setShaking] = useState(false);
-  const [revealed, setRevealed] = useState(false);
-  const [view, setView] = useState("main");
-  const [history, setHistory] = useState([]);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [tapCount, setTapCount] = useState(0);
-  const orbRef = useRef(null);
-
-  const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
-
-  const handleShake = useCallback(() => {
-    if (shaking) return;
-    setShaking(true);
-    setRevealed(false);
-    setResult(null);
-    setTapCount((c) => c + 1);
-    if (soundEnabled) playSound("shake");
-    setTimeout(() => {
-      const chosen = weightedRandom(weights);
-      const option = OPTIONS.find((o) => o.id === chosen);
-      setResult(option);
-      setShaking(false);
-      setRevealed(true);
-      if (soundEnabled) playSound("reveal");
-      setHistory((prev) => [
-        { ...option, time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), timestamp: Date.now() },
-        ...prev.slice(0, 49),
-      ]);
-    }, 1200);
-  }, [shaking, weights, soundEnabled]);
-
-  const handleShare = () => {
-    if (!result) return;
-    const text = `⛰️ Mountain Oracle says: ${result.emoji} ${result.label}! #MountainOracle #SkiDay`;
-    if (navigator.share) {
-      navigator.share({ title: "Mountain Oracle", text }).catch(() => {});
-    } else {
-      navigator.clipboard.writeText(text).then(() => alert("Copied to clipboard!")).catch(() => {});
-    }
-  };
-
-  const setProfile = (key) => {
-    setWeights({ ...PROFILES[key].weights });
-    setActiveProfile(key);
-  };
-
-  const updateWeight = (id, val) => {
-    setWeights((prev) => ({ ...prev, [id]: val }));
-    setActiveProfile(null);
-  };
-
-  const getPercent = (id) => {
-    if (totalWeight === 0) return 0;
-    return ((weights[id] / totalWeight) * 100).toFixed(1);
-  };
-
-  const styleTag = `
-    @keyframes snowfall {
-      0% { transform: translateY(-10vh) translateX(0); opacity: 0; }
-      10% { opacity: 1; }
-      90% { opacity: 1; }
-      100% { transform: translateY(105vh) translateX(30px); opacity: 0; }
-    }
-    @keyframes orbShake {
-      0%, 100% { transform: translate(0, 0) rotate(0deg); }
-      10% { transform: translate(-8px, -6px) rotate(-3deg); }
-      20% { transform: translate(6px, 8px) rotate(2deg); }
-      30% { transform: translate(-10px, 4px) rotate(-2deg); }
-      40% { transform: translate(8px, -8px) rotate(3deg); }
-      50% { transform: translate(-6px, 6px) rotate(-1deg); }
-      60% { transform: translate(10px, -4px) rotate(2deg); }
-      70% { transform: translate(-8px, 8px) rotate(-3deg); }
-      80% { transform: translate(6px, -6px) rotate(1deg); }
-      90% { transform: translate(-4px, 4px) rotate(-2deg); }
-    }
-    @keyframes orbGlow {
-      0%, 100% { box-shadow: 0 0 30px rgba(99,102,241,0.3), 0 0 60px rgba(99,102,241,0.1); }
-      50% { box-shadow: 0 0 50px rgba(99,102,241,0.5), 0 0 100px rgba(99,102,241,0.2); }
-    }
-    @keyframes revealPop {
-      0% { transform: scale(0.3); opacity: 0; }
-      60% { transform: scale(1.15); }
-      100% { transform: scale(1); opacity: 1; }
-    }
-    @keyframes fadeSlideUp {
-      0% { transform: translateY(20px); opacity: 0; }
-      100% { transform: translateY(0); opacity: 1; }
-    }
-    @keyframes subtlePulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.02); }
-    }
-    input[type="range"] { -webkit-appearance: none; appearance: none; }
-    input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none; appearance: none; width: 20px; height: 20px;
-      border-radius: 50%; background: #fff; cursor: pointer; box-shadow: 0 1px 6px rgba(0,0,0,0.4);
-      margin-top: -7px;
-    }
-    input[type="range"]::-moz-range-thumb {
-      width: 20px; height: 20px; border-radius: 50%; background: #fff;
-      cursor: pointer; box-shadow: 0 1px 6px rgba(0,0,0,0.4); border: none;
-    }
-  `;
-
-  const renderMain = () => (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 80px)", padding: "20px" }}>
-      <div style={{ textAlign: "center", marginBottom: 16 }}>
-        <h1 style={{ fontSize: 32, fontWeight: 800, color: "#fff", margin: 0, letterSpacing: "-0.5px", textShadow: "0 2px 20px rgba(99,102,241,0.5)" }}>
-          ⛰️ Mountain Oracle
-        </h1>
-        <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, margin: "4px 0 0" }}>
-          Tap the orb to reveal your fate
-        </p>
-      </div>
-
-      {activeProfile && (
-        <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 20, padding: "4px 14px", fontSize: 12, color: "rgba(255,255,255,0.6)", marginBottom: 20, backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.1)" }}>
-          {PROFILES[activeProfile].emoji} {PROFILES[activeProfile].name} Mode
-        </div>
-      )}
-
-      <div
-        ref={orbRef}
-        onClick={handleShake}
-        style={{
-          width: 220, height: 220, borderRadius: "50%", cursor: "pointer",
-          background: revealed && result
-            ? `radial-gradient(circle at 35% 35%, ${result.color}dd, ${result.color}44)`
-            : "radial-gradient(circle at 35% 35%, #4f46e5, #1e1b4b, #0f0a2e)",
-          display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column",
-          animation: shaking ? "orbShake 0.12s infinite" : revealed ? "none" : "orbGlow 3s ease-in-out infinite, subtlePulse 4s ease-in-out infinite",
-          boxShadow: revealed && result
-            ? `0 0 60px ${result.color}66, 0 0 120px ${result.color}22, inset 0 0 40px rgba(0,0,0,0.3)`
-            : "0 0 30px rgba(99,102,241,0.3), 0 0 60px rgba(99,102,241,0.1), inset 0 0 40px rgba(0,0,0,0.3)",
-          transition: "background 0.5s, box-shadow 0.5s",
-          position: "relative", overflow: "hidden", userSelect: "none", WebkitTapHighlightColor: "transparent",
-        }}
-      >
-        <div style={{ position: "absolute", top: "8%", left: "15%", width: "35%", height: "25%", borderRadius: "50%", background: "linear-gradient(180deg, rgba(255,255,255,0.25) 0%, transparent 100%)", filter: "blur(4px)", pointerEvents: "none" }} />
-        {shaking ? (
-          <div style={{ fontSize: 40, animation: "orbShake 0.08s infinite" }}>❄️</div>
-        ) : revealed && result ? (
-          <div style={{ animation: "revealPop 0.5s ease-out", textAlign: "center" }}>
-            <div style={{ fontSize: 56, lineHeight: 1 }}>{result.emoji}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", marginTop: 8, textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>{result.label}</div>
-          </div>
-        ) : (
-          <div style={{ textAlign: "center", color: "rgba(255,255,255,0.6)" }}>
-            <div style={{ fontSize: 36 }}>🎱</div>
-            <div style={{ fontSize: 11, marginTop: 6, fontWeight: 500 }}>TAP ME</div>
-          </div>
-        )}
-      </div>
-
-      {revealed && result && (
-        <div style={{ animation: "fadeSlideUp 0.4s ease-out 0.2s both", textAlign: "center", marginTop: 16 }}>
-          <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14, margin: 0, fontStyle: "italic" }}>{result.desc}</p>
-          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, margin: "6px 0 0" }}>{getPercent(result.id)}% chance with current settings</p>
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: 10, marginTop: 24, flexWrap: "wrap", justifyContent: "center" }}>
-        {revealed && result && (
-          <button onClick={handleShare} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 12, padding: "10px 20px", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", backdropFilter: "blur(10px)", transition: "all 0.2s" }}
-            onMouseEnter={(e) => { e.target.style.background = "rgba(255,255,255,0.2)"; }}
-            onMouseLeave={(e) => { e.target.style.background = "rgba(255,255,255,0.1)"; }}>
-            📤 Share Result
-          </button>
-        )}
-      </div>
-
-      {tapCount > 0 && (
-        <div style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, marginTop: 20 }}>
-          {tapCount} decision{tapCount !== 1 ? "s" : ""} made today
-        </div>
-      )}
-    </div>
-  );
-
-  const renderSettings = () => (
-    <div style={{ padding: "20px", maxWidth: 420, margin: "0 auto" }}>
-      <h2 style={{ color: "#fff", fontSize: 22, fontWeight: 700, margin: "0 0 4px", textAlign: "center" }}>Settings</h2>
-      <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, textAlign: "center", margin: "0 0 20px" }}>Set weights 1–10 for each option. Higher = more likely.</p>
-
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "10px 16px", marginBottom: 16, border: "1px solid rgba(255,255,255,0.08)" }}>
-        <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 14 }}>🔊 Sound Effects</span>
-        <div onClick={() => setSoundEnabled(!soundEnabled)} style={{ width: 44, height: 24, borderRadius: 12, cursor: "pointer", transition: "all 0.2s", background: soundEnabled ? "#6366f1" : "rgba(255,255,255,0.15)", position: "relative" }}>
-          <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: soundEnabled ? 23 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.3)" }} />
-        </div>
-      </div>
-
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Quick Profiles</div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {Object.entries(PROFILES).map(([key, prof]) => (
-            <button key={key} onClick={() => setProfile(key)} style={{ background: activeProfile === key ? "#6366f1" : "rgba(255,255,255,0.08)", border: activeProfile === key ? "1px solid #818cf8" : "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "8px 14px", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>
-              {prof.emoji} {prof.name}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {OPTIONS.map((opt) => (
-          <div key={opt.id} style={{ background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: "10px 14px", border: "1px solid rgba(255,255,255,0.06)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <span style={{ color: "#fff", fontSize: 14, fontWeight: 600 }}>{opt.emoji} {opt.label}</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, minWidth: 42, textAlign: "right" }}>{getPercent(opt.id)}%</span>
-                <span style={{ background: opt.color + "33", color: opt.color === "#1e1e2e" ? "#a1a1aa" : opt.color, borderRadius: 6, padding: "2px 8px", fontSize: 13, fontWeight: 700, minWidth: 20, textAlign: "center" }}>{weights[opt.id]}</span>
-              </div>
-            </div>
-            <input type="range" min="1" max="10" value={weights[opt.id]} onChange={(e) => updateWeight(opt.id, parseInt(e.target.value))}
-              style={{ width: "100%", height: 6, background: `linear-gradient(to right, ${opt.color === "#1e1e2e" ? "#71717a" : opt.color} 0%, ${opt.color === "#1e1e2e" ? "#71717a" : opt.color} ${((weights[opt.id] - 1) / 9) * 100}%, rgba(255,255,255,0.1) ${((weights[opt.id] - 1) / 9) * 100}%, rgba(255,255,255,0.1) 100%)`, borderRadius: 3, outline: "none", cursor: "pointer" }} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  const renderHistory = () => (
-    <div style={{ padding: "20px", maxWidth: 420, margin: "0 auto" }}>
-      <h2 style={{ color: "#fff", fontSize: 22, fontWeight: 700, margin: "0 0 4px", textAlign: "center" }}>Today's Log</h2>
-      <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, textAlign: "center", margin: "0 0 20px" }}>
-        {history.length === 0 ? "No decisions yet. Go tap that orb!" : `${history.length} decision${history.length !== 1 ? "s" : ""} so far`}
-      </p>
-      {history.length > 0 && (
-        <>
-          <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", marginBottom: 20, background: "rgba(255,255,255,0.05)" }}>
-            {OPTIONS.map((opt) => {
-              const count = history.filter((h) => h.id === opt.id).length;
-              if (count === 0) return null;
-              return <div key={opt.id} style={{ width: `${(count / history.length) * 100}%`, background: opt.id === "black" ? "#71717a" : opt.color, transition: "width 0.3s" }} />;
-            })}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {history.map((item, i) => (
-              <div key={item.timestamp + "-" + i} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.05)", borderRadius: 10, padding: "10px 14px", border: "1px solid rgba(255,255,255,0.06)", animation: i === 0 ? "fadeSlideUp 0.3s ease-out" : "none" }}>
-                <span style={{ fontSize: 24 }}>{item.emoji}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ color: "#fff", fontSize: 14, fontWeight: 600 }}>{item.label}</div>
-                  <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 11 }}>{item.desc}</div>
-                </div>
-                <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>{item.time}</span>
-              </div>
-            ))}
-          </div>
-          <button onClick={() => { setHistory([]); setTapCount(0); }} style={{ display: "block", margin: "20px auto 0", background: "rgba(220,38,38,0.15)", border: "1px solid rgba(220,38,38,0.25)", borderRadius: 10, padding: "8px 20px", color: "#fca5a5", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-            Clear History
-          </button>
-        </>
-      )}
-    </div>
-  );
-
-  return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(170deg, #0c0a1d 0%, #1a1145 30%, #0f172a 60%, #0c1222 100%)", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif", position: "relative", overflow: "hidden" }}>
-      <style>{styleTag}</style>
-      {snowflakes.map((s) => (
-        <div key={s.id} style={{ position: "fixed", left: `${s.left}%`, top: -10, width: s.size, height: s.size, borderRadius: "50%", background: `rgba(255,255,255,${s.opacity})`, animation: `snowfall ${s.duration}s ${s.delay}s linear infinite`, pointerEvents: "none", zIndex: 0 }} />
-      ))}
-      <svg viewBox="0 0 400 80" style={{ position: "fixed", bottom: 0, left: 0, width: "100%", zIndex: 0, opacity: 0.08 }}>
-        <polygon points="0,80 40,25 80,55 130,10 180,45 220,20 270,50 320,15 370,40 400,30 400,80" fill="#fff" />
-      </svg>
-      <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", display: "flex", flexDirection: "column", position: "relative", zIndex: 1 }}>
-        <div style={{ flex: 1, overflowY: "auto", paddingBottom: 80 }}>
-          {view === "main" && renderMain()}
-          {view === "settings" && renderSettings()}
-          {view === "history" && renderHistory()}
-        </div>
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "rgba(12,10,29,0.9)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.08)", padding: "8px 0 max(8px, env(safe-area-inset-bottom))", zIndex: 10 }}>
-          <div style={{ display: "flex", justifyContent: "center", gap: 0, maxWidth: 480, margin: "0 auto" }}>
-            {[
-              { id: "main", icon: "🎱", label: "Oracle" },
-              { id: "history", icon: "📋", label: "Log" },
-              { id: "settings", icon: "⚙️", label: "Settings" },
-            ].map((tab) => (
-              <button key={tab.id} onClick={() => setView(tab.id)} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", padding: "6px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, opacity: view === tab.id ? 1 : 0.4, transition: "opacity 0.2s" }}>
-                <span style={{ fontSize: 20 }}>{tab.icon}</span>
-                <span style={{ color: "#fff", fontSize: 10, fontWeight: 600 }}>{tab.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+// ═══════════════════════════════════════════
+// Weighted Random Pick
+// ═══════════════════════════════════════════
+function pickRandom() {
+  const totalWeight = OPTIONS.reduce((sum, opt) => sum + (weights[opt.id] || 0), 0);
+  if (totalWeight === 0) return OPTIONS[Math.floor(Math.random() * OPTIONS.length)];
+  let rand = Math.random() * totalWeight;
+  for (const opt of OPTIONS) {
+    rand -= (weights[opt.id] || 0);
+    if (rand <= 0) return opt;
+  }
+  return OPTIONS[OPTIONS.length - 1];
 }
+
+function getProbs() {
+  const total = OPTIONS.reduce((s, o) => s + (weights[o.id] || 0), 0);
+  return OPTIONS.map(o => total > 0 ? (weights[o.id] || 0) / total : 1 / OPTIONS.length);
+}
+
+// ═══════════════════════════════════════════
+// Oracle Logic
+// ═══════════════════════════════════════════
+function triggerOracle() {
+  if (isAnimating) return;
+  isAnimating = true;
+
+  const card = document.getElementById('resultCard');
+  const content = document.getElementById('resultContent');
+
+  card.classList.add('shaking');
+  card.removeAttribute('data-result');
+  playShakeSound();
+
+  let scrambleCount = 0;
+  const scrambleInterval = setInterval(() => {
+    const rnd = OPTIONS[Math.floor(Math.random() * OPTIONS.length)];
+    content.innerHTML = `
+      <div class="result-emoji" style="opacity:0.3">${rnd.emoji}</div>
+      <div class="result-text" style="opacity:0.3">${rnd.name}</div>
+    `;
+    scrambleCount++;
+    if (scrambleCount > 8) {
+      clearInterval(scrambleInterval);
+      const pick = pickRandom();
+      lastResult = pick;
+      card.setAttribute('data-result', pick.id);
+      content.innerHTML = `
+        <div class="result-emoji pop-in">${pick.emoji}</div>
+        <div class="result-text fade-in">${pick.name}</div>
+        <div class="result-subtitle fade-in">${pick.subtitle}</div>
+      `;
+      playRevealSound();
+      history.unshift({ ...pick, time: new Date() });
+      renderHistory();
+      document.getElementById('shareBtn').style.display = 'inline-block';
+      card.classList.remove('shaking');
+      isAnimating = false;
+    }
+  }, 80);
+}
+
+// ═══════════════════════════════════════════
+// Shake Detection
+// ═══════════════════════════════════════════
+let shakeEnabled = false;
+let lastShakeTime = 0;
+const SHAKE_THRESHOLD = 25;
+const SHAKE_COOLDOWN = 1500;
+
+function handleMotion(e) {
+  const acc = e.accelerationIncludingGravity || e.acceleration;
+  if (!acc) return;
+  const magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
+  const now = Date.now();
+  if (magnitude > SHAKE_THRESHOLD && now - lastShakeTime > SHAKE_COOLDOWN) {
+    lastShakeTime = now;
+    triggerOracle();
+  }
+}
+
+async function enableShake() {
+  if (shakeEnabled) return;
+  try {
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+      const perm = await DeviceMotionEvent.requestPermission();
+      if (perm === 'granted') {
+        window.addEventListener('devicemotion', handleMotion);
+        shakeEnabled = true;
+      }
+    } else if ('DeviceMotionEvent' in window) {
+      window.addEventListener('devicemotion', handleMotion);
+      shakeEnabled = true;
+    }
+  } catch(e) {}
+
+  if (shakeEnabled) {
+    const ind = document.getElementById('shakeIndicator');
+    ind.classList.add('show');
+    setTimeout(() => ind.classList.remove('show'), 2000);
+  }
+}
+
+// ═══════════════════════════════════════════
+// Tabs
+// ═══════════════════════════════════════════
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(`panel-${tab.dataset.tab}`).classList.add('active');
+  });
+});
+
+// ═══════════════════════════════════════════
+// History
+// ═══════════════════════════════════════════
+function renderHistory() {
+  const container = document.getElementById('historyContent');
+  if (history.length === 0) {
+    container.innerHTML = `<div class="history-empty"><span>⛷️</span>No picks yet today!<br>Shake it up to get started.</div>`;
+    return;
+  }
+  let html = '<div class="history-list">';
+  history.forEach((item, i) => {
+    const timeStr = item.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    html += `
+      <div class="history-item fade-in">
+        <div class="history-num">${history.length - i}</div>
+        <div class="history-emoji">${item.emoji}</div>
+        <div class="history-info">
+          <div class="history-name">${item.name}</div>
+          <div class="history-time">${timeStr}</div>
+        </div>
+      </div>`;
+  });
+  html += '</div>';
+  html += '<button class="clear-history-btn" onclick="clearHistory()">🗑️ Clear History</button>';
+  container.innerHTML = html;
+}
+
+function clearHistory() {
+  history = [];
+  renderHistory();
+}
+
+// ═══════════════════════════════════════════
+// Settings
+// ═══════════════════════════════════════════
+function renderSliders() {
+  const container = document.getElementById('weightSliders');
+  const probs = getProbs();
+  let html = '';
+  OPTIONS.forEach((opt, i) => {
+    const w = weights[opt.id] || 0;
+    const pct = (probs[i] * 100).toFixed(1);
+    html += `
+      <div class="weight-item">
+        <div class="weight-emoji">${opt.emoji}</div>
+        <div class="weight-info">
+          <div class="weight-name">${opt.name}</div>
+          <div class="weight-slider-row">
+            <input type="range" class="weight-slider" min="0" max="100" value="${w}"
+              data-id="${opt.id}" oninput="updateWeight(this)">
+            <span class="weight-val" id="val-${opt.id}">${w}</span>
+          </div>
+          <div class="prob-bar" id="bar-${opt.id}" style="width:${pct}%; background:${opt.color};"></div>
+        </div>
+      </div>`;
+  });
+  container.innerHTML = html;
+}
+
+function updateWeight(slider) {
+  const id = slider.dataset.id;
+  const val = parseInt(slider.value);
+  weights[id] = val;
+  document.getElementById(`val-${id}`).textContent = val;
+  const probs = getProbs();
+  OPTIONS.forEach((opt, i) => {
+    const bar = document.getElementById(`bar-${opt.id}`);
+    bar.style.width = (probs[i] * 100).toFixed(1) + '%';
+  });
+}
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const preset = PRESETS[btn.dataset.preset];
+    if (!preset) return;
+    weights = { ...preset };
+    renderSliders();
+  });
+});
+
+document.getElementById('shareConfig').addEventListener('click', () => {
+  const params = new URLSearchParams();
+  OPTIONS.forEach(opt => params.set(opt.id, weights[opt.id]));
+  const url = window.location.origin + window.location.pathname + '#' + params.toString();
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.getElementById('shareConfig');
+    btn.textContent = '✅ Link Copied!';
+    setTimeout(() => btn.textContent = '📋 Copy Settings Link', 2000);
+  }).catch(() => {
+    prompt('Copy this link:', url);
+  });
+});
+
+// ═══════════════════════════════════════════
+// Share Result as Image
+// ═══════════════════════════════════════════
+document.getElementById('shareBtn').addEventListener('click', () => {
+  if (!lastResult) return;
+  const canvas = document.getElementById('shareCanvas');
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#f0f4f8';
+  ctx.fillRect(0, 0, 600, 400);
+
+  const cardX = 40, cardY = 40, cardW = 520, cardH = 320, r = 20;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(cardX + r, cardY);
+  ctx.lineTo(cardX + cardW - r, cardY);
+  ctx.quadraticCurveTo(cardX + cardW, cardY, cardX + cardW, cardY + r);
+  ctx.lineTo(cardX + cardW, cardY + cardH - r);
+  ctx.quadraticCurveTo(cardX + cardW, cardY + cardH, cardX + cardW - r, cardY + cardH);
+  ctx.lineTo(cardX + r, cardY + cardH);
+  ctx.quadraticCurveTo(cardX, cardY + cardH, cardX, cardY + cardH - r);
+  ctx.lineTo(cardX, cardY + r);
+  ctx.quadraticCurveTo(cardX, cardY, cardX + r, cardY);
+  ctx.fill();
+
+  const opt = OPTIONS.find(o => o.id === lastResult.id);
+  ctx.fillStyle = opt.color;
+  ctx.fillRect(cardX, cardY, cardW, 6);
+
+  ctx.font = '64px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(lastResult.emoji, 300, 160);
+
+  ctx.font = '700 32px Inter, sans-serif';
+  ctx.fillStyle = '#1a2233';
+  ctx.fillText(lastResult.name, 300, 220);
+
+  ctx.font = '400 16px Inter, sans-serif';
+  ctx.fillStyle = '#5f6b7a';
+  ctx.fillText(lastResult.subtitle, 300, 255);
+
+  ctx.font = '600 13px Inter, sans-serif';
+  ctx.fillStyle = '#9aa5b4';
+  ctx.fillText('⛷️ Ski Day Oracle', 300, 340);
+
+  canvas.toBlob(blob => {
+    if (navigator.share && navigator.canShare) {
+      const file = new File([blob], 'ski-oracle.png', { type: 'image/png' });
+      if (navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file], title: 'Ski Day Oracle', text: `The oracle says: ${lastResult.name}!` });
+        return;
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'ski-oracle.png';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 'image/png');
+});
+
+// ═══════════════════════════════════════════
+// Sound Toggle
+// ═══════════════════════════════════════════
+document.getElementById('soundToggle').addEventListener('click', (e) => {
+  e.stopPropagation();
+  soundOn = !soundOn;
+  document.getElementById('soundToggle').textContent = soundOn ? '🔊' : '🔇';
+});
+
+// ═══════════════════════════════════════════
+// Snow
+// ═══════════════════════════════════════════
+function createSnow() {
+  const container = document.getElementById('snow');
+  const count = window.innerWidth < 500 ? 30 : 50;
+  for (let i = 0; i < count; i++) {
+    const flake = document.createElement('div');
+    flake.className = 'snowflake';
+    flake.textContent = '•';
+    flake.style.left = Math.random() * 100 + '%';
+    flake.style.animationDuration = (4 + Math.random() * 8) + 's';
+    flake.style.animationDelay = (Math.random() * 10) + 's';
+    flake.style.fontSize = (6 + Math.random() * 8) + 'px';
+    flake.style.opacity = 0.3 + Math.random() * 0.5;
+    container.appendChild(flake);
+  }
+}
+
+// ═══════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════
+document.getElementById('oracleBtn').addEventListener('click', () => {
+  enableShake();
+  triggerOracle();
+});
+
+renderSliders();
+renderHistory();
+createSnow();
+
+if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission !== 'function') {
+  enableShake();
+}
+</script>
+</body>
+</html>
