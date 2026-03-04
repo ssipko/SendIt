@@ -340,12 +340,12 @@
 
   <div class="header">
     <div class="header-icon">⛷️</div>
-    <h1>Ski Day Oracle</h1>
+    <h1>Ski Day Magic 8 Ball</h1>
     <p>Shake or tap to decide your next move</p>
   </div>
 
   <div class="tabs">
-    <button class="tab active" data-tab="oracle">🎿 Oracle</button>
+    <button class="tab active" data-tab="oracle">🎿 Magic 8 Ball</button>
     <button class="tab" data-tab="history">📋 History</button>
     <button class="tab" data-tab="settings">⚙️ Settings</button>
   </div>
@@ -747,13 +747,13 @@ document.getElementById('shareBtn').addEventListener('click', () => {
 
   ctx.font = '600 13px Inter, sans-serif';
   ctx.fillStyle = '#9aa5b4';
-  ctx.fillText('⛷️ Ski Day Oracle', 300, 340);
+  ctx.fillText('⛷️ Ski Day Magic 8 Ball', 300, 340);
 
   canvas.toBlob(blob => {
     if (navigator.share && navigator.canShare) {
       const file = new File([blob], 'ski-oracle.png', { type: 'image/png' });
       if (navigator.canShare({ files: [file] })) {
-        navigator.share({ files: [file], title: 'Ski Day Oracle', text: `The oracle says: ${lastResult.name}!` });
+        navigator.share({ files: [file], title: 'Ski Day Magic 8 Ball', text: `The Magic 8 Ball says: ${lastResult.name}!` });
         return;
       }
     }
