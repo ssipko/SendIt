@@ -1,0 +1,362 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+
+const OPTIONS = [
+  { id: "green", label: "Green Run", emoji: "🟢", color: "#22c55e", desc: "Easy cruiser" },
+  { id: "blue", label: "Blue Run", emoji: "🔵", color: "#3b82f6", desc: "Intermediate fun" },
+  { id: "black", label: "Black Run", emoji: "⬛", color: "#1e1e2e", desc: "Expert terrain" },
+  { id: "break", label: "Take a Break", emoji: "☕", color: "#a16207", desc: "Hot cocoa time" },
+  { id: "done", label: "Done for the Day", emoji: "🛑", color: "#dc2626", desc: "Call it quits" },
+  { id: "top", label: "Go to the Top", emoji: "⛰️", color: "#6366f1", desc: "Summit vibes" },
+  { id: "tbar", label: "Take the T-Bar", emoji: "🪝", color: "#0891b2", desc: "Old school lift" },
+  { id: "park", label: "Terrain Park", emoji: "🏂", color: "#f59e0b", desc: "Jumps & rails" },
+  { id: "apres", label: "Start Après Ski", emoji: "🍺", color: "#e11d48", desc: "Party time!" },
+];
+
+const PROFILES = {
+  balanced: { name: "Balanced", emoji: "⚖️", weights: { green: 5, blue: 5, black: 5, break: 5, done: 5, top: 5, tbar: 5, park: 5, apres: 5 } },
+  sendit: { name: "Send It", emoji: "🔥", weights: { green: 1, blue: 3, black: 10, break: 1, done: 1, top: 10, tbar: 5, park: 10, apres: 2 } },
+  chill: { name: "Chill Day", emoji: "😌", weights: { green: 8, blue: 7, black: 1, break: 9, done: 5, top: 2, tbar: 3, park: 1, apres: 8 } },
+  beginner: { name: "Beginner", emoji: "⛷️", weights: { green: 10, blue: 5, black: 1, break: 8, done: 4, top: 2, tbar: 2, park: 1, apres: 4 } },
+  party: { name: "Party Mode", emoji: "🎉", weights: { green: 2, blue: 3, black: 4, break: 3, done: 1, top: 3, tbar: 2, park: 8, apres: 10 } },
+};
+
+const snowflakes = Array.from({ length: 40 }, (_, i) => ({
+  id: i,
+  left: Math.random() * 100,
+  delay: Math.random() * 8,
+  duration: 4 + Math.random() * 6,
+  size: 2 + Math.random() * 6,
+  opacity: 0.3 + Math.random() * 0.5,
+}));
+
+function weightedRandom(weights) {
+  const total = Object.values(weights).reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (const [key, weight] of Object.entries(weights)) {
+    r -= weight;
+    if (r <= 0) return key;
+  }
+  return Object.keys(weights)[0];
+}
+
+function playSound(type) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    if (type === "shake") {
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(200, ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(600, ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.15);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.15);
+    } else if (type === "reveal") {
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(400, ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(800, ctx.currentTime + 0.1);
+      osc.frequency.setValueAtTime(600, ctx.currentTime + 0.15);
+      osc.frequency.linearRampToValueAtTime(1200, ctx.currentTime + 0.3);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+    }
+  } catch (e) {}
+}
+
+export default function MountainOracle() {
+  const [weights, setWeights] = useState({ ...PROFILES.balanced.weights });
+  const [activeProfile, setActiveProfile] = useState("balanced");
+  const [result, setResult] = useState(null);
+  const [shaking, setShaking] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const [view, setView] = useState("main");
+  const [history, setHistory] = useState([]);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [tapCount, setTapCount] = useState(0);
+  const orbRef = useRef(null);
+
+  const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
+
+  const handleShake = useCallback(() => {
+    if (shaking) return;
+    setShaking(true);
+    setRevealed(false);
+    setResult(null);
+    setTapCount((c) => c + 1);
+    if (soundEnabled) playSound("shake");
+    setTimeout(() => {
+      const chosen = weightedRandom(weights);
+      const option = OPTIONS.find((o) => o.id === chosen);
+      setResult(option);
+      setShaking(false);
+      setRevealed(true);
+      if (soundEnabled) playSound("reveal");
+      setHistory((prev) => [
+        { ...option, time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), timestamp: Date.now() },
+        ...prev.slice(0, 49),
+      ]);
+    }, 1200);
+  }, [shaking, weights, soundEnabled]);
+
+  const handleShare = () => {
+    if (!result) return;
+    const text = `⛰️ Mountain Oracle says: ${result.emoji} ${result.label}! #MountainOracle #SkiDay`;
+    if (navigator.share) {
+      navigator.share({ title: "Mountain Oracle", text }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(text).then(() => alert("Copied to clipboard!")).catch(() => {});
+    }
+  };
+
+  const setProfile = (key) => {
+    setWeights({ ...PROFILES[key].weights });
+    setActiveProfile(key);
+  };
+
+  const updateWeight = (id, val) => {
+    setWeights((prev) => ({ ...prev, [id]: val }));
+    setActiveProfile(null);
+  };
+
+  const getPercent = (id) => {
+    if (totalWeight === 0) return 0;
+    return ((weights[id] / totalWeight) * 100).toFixed(1);
+  };
+
+  const styleTag = `
+    @keyframes snowfall {
+      0% { transform: translateY(-10vh) translateX(0); opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { transform: translateY(105vh) translateX(30px); opacity: 0; }
+    }
+    @keyframes orbShake {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      10% { transform: translate(-8px, -6px) rotate(-3deg); }
+      20% { transform: translate(6px, 8px) rotate(2deg); }
+      30% { transform: translate(-10px, 4px) rotate(-2deg); }
+      40% { transform: translate(8px, -8px) rotate(3deg); }
+      50% { transform: translate(-6px, 6px) rotate(-1deg); }
+      60% { transform: translate(10px, -4px) rotate(2deg); }
+      70% { transform: translate(-8px, 8px) rotate(-3deg); }
+      80% { transform: translate(6px, -6px) rotate(1deg); }
+      90% { transform: translate(-4px, 4px) rotate(-2deg); }
+    }
+    @keyframes orbGlow {
+      0%, 100% { box-shadow: 0 0 30px rgba(99,102,241,0.3), 0 0 60px rgba(99,102,241,0.1); }
+      50% { box-shadow: 0 0 50px rgba(99,102,241,0.5), 0 0 100px rgba(99,102,241,0.2); }
+    }
+    @keyframes revealPop {
+      0% { transform: scale(0.3); opacity: 0; }
+      60% { transform: scale(1.15); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    @keyframes fadeSlideUp {
+      0% { transform: translateY(20px); opacity: 0; }
+      100% { transform: translateY(0); opacity: 1; }
+    }
+    @keyframes subtlePulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+    input[type="range"] { -webkit-appearance: none; appearance: none; }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none; width: 20px; height: 20px;
+      border-radius: 50%; background: #fff; cursor: pointer; box-shadow: 0 1px 6px rgba(0,0,0,0.4);
+      margin-top: -7px;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 20px; height: 20px; border-radius: 50%; background: #fff;
+      cursor: pointer; box-shadow: 0 1px 6px rgba(0,0,0,0.4); border: none;
+    }
+  `;
+
+  const renderMain = () => (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 80px)", padding: "20px" }}>
+      <div style={{ textAlign: "center", marginBottom: 16 }}>
+        <h1 style={{ fontSize: 32, fontWeight: 800, color: "#fff", margin: 0, letterSpacing: "-0.5px", textShadow: "0 2px 20px rgba(99,102,241,0.5)" }}>
+          ⛰️ Mountain Oracle
+        </h1>
+        <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, margin: "4px 0 0" }}>
+          Tap the orb to reveal your fate
+        </p>
+      </div>
+
+      {activeProfile && (
+        <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 20, padding: "4px 14px", fontSize: 12, color: "rgba(255,255,255,0.6)", marginBottom: 20, backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.1)" }}>
+          {PROFILES[activeProfile].emoji} {PROFILES[activeProfile].name} Mode
+        </div>
+      )}
+
+      <div
+        ref={orbRef}
+        onClick={handleShake}
+        style={{
+          width: 220, height: 220, borderRadius: "50%", cursor: "pointer",
+          background: revealed && result
+            ? `radial-gradient(circle at 35% 35%, ${result.color}dd, ${result.color}44)`
+            : "radial-gradient(circle at 35% 35%, #4f46e5, #1e1b4b, #0f0a2e)",
+          display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column",
+          animation: shaking ? "orbShake 0.12s infinite" : revealed ? "none" : "orbGlow 3s ease-in-out infinite, subtlePulse 4s ease-in-out infinite",
+          boxShadow: revealed && result
+            ? `0 0 60px ${result.color}66, 0 0 120px ${result.color}22, inset 0 0 40px rgba(0,0,0,0.3)`
+            : "0 0 30px rgba(99,102,241,0.3), 0 0 60px rgba(99,102,241,0.1), inset 0 0 40px rgba(0,0,0,0.3)",
+          transition: "background 0.5s, box-shadow 0.5s",
+          position: "relative", overflow: "hidden", userSelect: "none", WebkitTapHighlightColor: "transparent",
+        }}
+      >
+        <div style={{ position: "absolute", top: "8%", left: "15%", width: "35%", height: "25%", borderRadius: "50%", background: "linear-gradient(180deg, rgba(255,255,255,0.25) 0%, transparent 100%)", filter: "blur(4px)", pointerEvents: "none" }} />
+        {shaking ? (
+          <div style={{ fontSize: 40, animation: "orbShake 0.08s infinite" }}>❄️</div>
+        ) : revealed && result ? (
+          <div style={{ animation: "revealPop 0.5s ease-out", textAlign: "center" }}>
+            <div style={{ fontSize: 56, lineHeight: 1 }}>{result.emoji}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", marginTop: 8, textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>{result.label}</div>
+          </div>
+        ) : (
+          <div style={{ textAlign: "center", color: "rgba(255,255,255,0.6)" }}>
+            <div style={{ fontSize: 36 }}>🎱</div>
+            <div style={{ fontSize: 11, marginTop: 6, fontWeight: 500 }}>TAP ME</div>
+          </div>
+        )}
+      </div>
+
+      {revealed && result && (
+        <div style={{ animation: "fadeSlideUp 0.4s ease-out 0.2s both", textAlign: "center", marginTop: 16 }}>
+          <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14, margin: 0, fontStyle: "italic" }}>{result.desc}</p>
+          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, margin: "6px 0 0" }}>{getPercent(result.id)}% chance with current settings</p>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 10, marginTop: 24, flexWrap: "wrap", justifyContent: "center" }}>
+        {revealed && result && (
+          <button onClick={handleShare} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 12, padding: "10px 20px", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", backdropFilter: "blur(10px)", transition: "all 0.2s" }}
+            onMouseEnter={(e) => { e.target.style.background = "rgba(255,255,255,0.2)"; }}
+            onMouseLeave={(e) => { e.target.style.background = "rgba(255,255,255,0.1)"; }}>
+            📤 Share Result
+          </button>
+        )}
+      </div>
+
+      {tapCount > 0 && (
+        <div style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, marginTop: 20 }}>
+          {tapCount} decision{tapCount !== 1 ? "s" : ""} made today
+        </div>
+      )}
+    </div>
+  );
+
+  const renderSettings = () => (
+    <div style={{ padding: "20px", maxWidth: 420, margin: "0 auto" }}>
+      <h2 style={{ color: "#fff", fontSize: 22, fontWeight: 700, margin: "0 0 4px", textAlign: "center" }}>Settings</h2>
+      <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, textAlign: "center", margin: "0 0 20px" }}>Set weights 1–10 for each option. Higher = more likely.</p>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "10px 16px", marginBottom: 16, border: "1px solid rgba(255,255,255,0.08)" }}>
+        <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 14 }}>🔊 Sound Effects</span>
+        <div onClick={() => setSoundEnabled(!soundEnabled)} style={{ width: 44, height: 24, borderRadius: 12, cursor: "pointer", transition: "all 0.2s", background: soundEnabled ? "#6366f1" : "rgba(255,255,255,0.15)", position: "relative" }}>
+          <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: soundEnabled ? 23 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.3)" }} />
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Quick Profiles</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {Object.entries(PROFILES).map(([key, prof]) => (
+            <button key={key} onClick={() => setProfile(key)} style={{ background: activeProfile === key ? "#6366f1" : "rgba(255,255,255,0.08)", border: activeProfile === key ? "1px solid #818cf8" : "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "8px 14px", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>
+              {prof.emoji} {prof.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {OPTIONS.map((opt) => (
+          <div key={opt.id} style={{ background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: "10px 14px", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <span style={{ color: "#fff", fontSize: 14, fontWeight: 600 }}>{opt.emoji} {opt.label}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, minWidth: 42, textAlign: "right" }}>{getPercent(opt.id)}%</span>
+                <span style={{ background: opt.color + "33", color: opt.color === "#1e1e2e" ? "#a1a1aa" : opt.color, borderRadius: 6, padding: "2px 8px", fontSize: 13, fontWeight: 700, minWidth: 20, textAlign: "center" }}>{weights[opt.id]}</span>
+              </div>
+            </div>
+            <input type="range" min="1" max="10" value={weights[opt.id]} onChange={(e) => updateWeight(opt.id, parseInt(e.target.value))}
+              style={{ width: "100%", height: 6, background: `linear-gradient(to right, ${opt.color === "#1e1e2e" ? "#71717a" : opt.color} 0%, ${opt.color === "#1e1e2e" ? "#71717a" : opt.color} ${((weights[opt.id] - 1) / 9) * 100}%, rgba(255,255,255,0.1) ${((weights[opt.id] - 1) / 9) * 100}%, rgba(255,255,255,0.1) 100%)`, borderRadius: 3, outline: "none", cursor: "pointer" }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderHistory = () => (
+    <div style={{ padding: "20px", maxWidth: 420, margin: "0 auto" }}>
+      <h2 style={{ color: "#fff", fontSize: 22, fontWeight: 700, margin: "0 0 4px", textAlign: "center" }}>Today's Log</h2>
+      <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, textAlign: "center", margin: "0 0 20px" }}>
+        {history.length === 0 ? "No decisions yet. Go tap that orb!" : `${history.length} decision${history.length !== 1 ? "s" : ""} so far`}
+      </p>
+      {history.length > 0 && (
+        <>
+          <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", marginBottom: 20, background: "rgba(255,255,255,0.05)" }}>
+            {OPTIONS.map((opt) => {
+              const count = history.filter((h) => h.id === opt.id).length;
+              if (count === 0) return null;
+              return <div key={opt.id} style={{ width: `${(count / history.length) * 100}%`, background: opt.id === "black" ? "#71717a" : opt.color, transition: "width 0.3s" }} />;
+            })}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {history.map((item, i) => (
+              <div key={item.timestamp + "-" + i} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.05)", borderRadius: 10, padding: "10px 14px", border: "1px solid rgba(255,255,255,0.06)", animation: i === 0 ? "fadeSlideUp 0.3s ease-out" : "none" }}>
+                <span style={{ fontSize: 24 }}>{item.emoji}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: "#fff", fontSize: 14, fontWeight: 600 }}>{item.label}</div>
+                  <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 11 }}>{item.desc}</div>
+                </div>
+                <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>{item.time}</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => { setHistory([]); setTapCount(0); }} style={{ display: "block", margin: "20px auto 0", background: "rgba(220,38,38,0.15)", border: "1px solid rgba(220,38,38,0.25)", borderRadius: 10, padding: "8px 20px", color: "#fca5a5", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            Clear History
+          </button>
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(170deg, #0c0a1d 0%, #1a1145 30%, #0f172a 60%, #0c1222 100%)", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif", position: "relative", overflow: "hidden" }}>
+      <style>{styleTag}</style>
+      {snowflakes.map((s) => (
+        <div key={s.id} style={{ position: "fixed", left: `${s.left}%`, top: -10, width: s.size, height: s.size, borderRadius: "50%", background: `rgba(255,255,255,${s.opacity})`, animation: `snowfall ${s.duration}s ${s.delay}s linear infinite`, pointerEvents: "none", zIndex: 0 }} />
+      ))}
+      <svg viewBox="0 0 400 80" style={{ position: "fixed", bottom: 0, left: 0, width: "100%", zIndex: 0, opacity: 0.08 }}>
+        <polygon points="0,80 40,25 80,55 130,10 180,45 220,20 270,50 320,15 370,40 400,30 400,80" fill="#fff" />
+      </svg>
+      <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", display: "flex", flexDirection: "column", position: "relative", zIndex: 1 }}>
+        <div style={{ flex: 1, overflowY: "auto", paddingBottom: 80 }}>
+          {view === "main" && renderMain()}
+          {view === "settings" && renderSettings()}
+          {view === "history" && renderHistory()}
+        </div>
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "rgba(12,10,29,0.9)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.08)", padding: "8px 0 max(8px, env(safe-area-inset-bottom))", zIndex: 10 }}>
+          <div style={{ display: "flex", justifyContent: "center", gap: 0, maxWidth: 480, margin: "0 auto" }}>
+            {[
+              { id: "main", icon: "🎱", label: "Oracle" },
+              { id: "history", icon: "📋", label: "Log" },
+              { id: "settings", icon: "⚙️", label: "Settings" },
+            ].map((tab) => (
+              <button key={tab.id} onClick={() => setView(tab.id)} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", padding: "6px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, opacity: view === tab.id ? 1 : 0.4, transition: "opacity 0.2s" }}>
+                <span style={{ fontSize: 20 }}>{tab.icon}</span>
+                <span style={{ color: "#fff", fontSize: 10, fontWeight: 600 }}>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
